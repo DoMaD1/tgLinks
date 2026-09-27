@@ -1,0 +1,8 @@
+.venv/
+.venv-macos/
+__pycache__/
+*.session*
+exports/
+build/
+dist/
+*.spec
