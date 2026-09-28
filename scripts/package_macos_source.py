@@ -3,10 +3,10 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parents[1]
-files = ['app.py', 'app_paths.py', 'links.py', 'scanner.py', 'requirements.txt',
+files = ['app.py', 'app_paths.py', 'links.py', 'scanner.py', 'settings.py', 'requirements.txt',
          'build_macos.sh', 'MACOS.md', '.gitignore', '.github/workflows/macos.yml',
          'scripts/verify_macos.py', 'tests/test_links.py', 'tests/test_scanner.py',
-         'tests/test_paths.py']
+         'tests/test_paths.py', 'tests/test_settings_filter.py']
 target = root / 'dist' / 'TelegramLinks-macOS-source.zip'
 target.parent.mkdir(exist_ok=True)
 with ZipFile(target, 'w', ZIP_DEFLATED) as archive:

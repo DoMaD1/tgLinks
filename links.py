@@ -2,7 +2,7 @@
 import html
 import re
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, parse_qs, unquote
 
 URL_RE = re.compile(r"(?:https?://|tg://|www\.|t\.me/|telegram\.me/)[^\s<>\"']+", re.I)
 
@@ -30,7 +30,17 @@ def normalize(value):
         return None
 
 
-def extract_links(message):
+def is_combot_cas(link):
+    parts = urlsplit(link)
+    if parts.scheme == 'tg' and parts.hostname == 'resolve':
+        query = parse_qs(parts.query)
+        return (query.get('domain', [''])[0].lower() == 'combot'
+                and query.get('appname', [''])[0].lower() == 'cas')
+    return (parts.hostname in ('t.me', 'www.t.me', 'telegram.me', 'www.telegram.me')
+            and unquote(parts.path).rstrip('/').lower() == '/combot/cas')
+
+
+def extract_links(message, exclude_cas=False):
     text = message.message or ''
     encoded = text.encode('utf-16-le')
     candidates = []
@@ -55,7 +65,8 @@ def extract_links(message):
         for button in row.buttons:
             if getattr(button, 'url', None):
                 candidates.append(button.url)
-    return list(dict.fromkeys(link for value in candidates if (link := normalize(value))))
+    return list(dict.fromkeys(link for value in candidates if (link := normalize(value))
+                              and not (exclude_cas and is_combot_cas(link))))
 
 
 def export_links(folder, chat, links, count, complete, scope='Полная история'):

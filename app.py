@@ -14,14 +14,16 @@ import time
 from links import extract_links, export_links
 from scanner import MODES, scan_messages
 from app_paths import export_directory, session_directory
+from settings import load_settings, save_settings
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Telegram → ссылки — 1.3 (быстрый поиск)')
-        self.geometry('880x600')
-        self.minsize(820, 570)
+        self.title('Telegram → ссылки — 1.4')
+        self.geometry('880x670')
+        self.minsize(820, 640)
+        saved = load_settings()
         self.events = queue.Queue()
         self.stop = threading.Event()
         self.running = False
@@ -32,8 +34,8 @@ class App(tk.Tk):
         ttk.Label(frame, text='Три режима поиска • Без повторов • TXT + кликабельный HTML').pack(anchor='w', pady=(4, 18))
         self.values = {}
         for key, label, default in [
-            ('api_id', 'API ID', os.getenv('TG_API_ID', '')),
-            ('api_hash', 'API Hash', os.getenv('TG_API_HASH', '')),
+            ('api_id', 'API ID', os.getenv('TG_API_ID', saved.get('api_id', ''))),
+            ('api_hash', 'API Hash', os.getenv('TG_API_HASH', saved.get('api_hash', ''))),
             ('phone', 'Телефон с кодом страны', ''),
             ('chat', 'Чат: @имя, t.me/имя или числовой ID', '@pl_warszawa_rabota'),
             ('folder', 'Папка результатов', str(export_directory())),
@@ -47,6 +49,12 @@ class App(tk.Tk):
             if key == 'folder':
                 ttk.Button(row, text='…', width=3, command=self.pick_folder).pack(side='left')
         ttk.Button(frame, text='Получить API ID / Hash', command=lambda: webbrowser.open('https://my.telegram.org/apps')).pack(anchor='w', pady=8)
+        self.remember = tk.BooleanVar(value=saved.get('remember', True))
+        self.exclude_cas = tk.BooleanVar(value=saved.get('exclude_cas', True))
+        ttk.Checkbutton(frame, text='Запоминать API ID и API Hash на этом компьютере', variable=self.remember,
+                        command=self.persist_settings).pack(anchor='w')
+        ttk.Checkbutton(frame, text='Исключать служебные ссылки Combot CAS', variable=self.exclude_cas).pack(anchor='w')
+        ttk.Button(frame, text='Сохранить настройки', command=self.persist_settings).pack(anchor='w', pady=4)
         self.mode = tk.StringVar(value='Полная история')
         self.mode_box = ttk.Combobox(frame, textvariable=self.mode, values=list(MODES), state='readonly', width=42)
         self.mode_box.pack(anchor='w')
@@ -71,14 +79,26 @@ class App(tk.Tk):
         if folder:
             self.values['folder'].set(folder)
 
+    def persist_settings(self):
+        try:
+            save_settings(self.values['api_id'].get(), self.values['api_hash'].get(),
+                          self.remember.get(), self.exclude_cas.get())
+            return True
+        except OSError:
+            messagebox.showerror('Настройки', 'Не удалось сохранить настройки. Проверьте доступ к папке данных приложения.')
+            return False
+
     def start(self):
         values = {key: value.get().strip() for key, value in self.values.items()}
         values['mode'] = self.mode.get()
+        values['exclude_cas'] = self.exclude_cas.get()
         if not values['api_id'].isdigit() or int(values['api_id']) <= 0 or not re.fullmatch(r'[a-fA-F0-9]{32}', values['api_hash']):
             messagebox.showerror('Данные API', 'Введите числовой API ID и API Hash (32 шестнадцатеричных символа).')
             return
         if not all(values[key] for key in ('phone', 'chat', 'folder')):
             messagebox.showerror('Данные', 'Заполните телефон, чат и папку результатов.')
+            return
+        if not self.persist_settings():
             return
         self.running = True
         self.stop.clear()
@@ -150,7 +170,7 @@ class App(tk.Tk):
             def on_wait(seconds):
                 self.events.put(('status', f'Telegram запросил паузу: {seconds} сек. Уже собрано ссылок: {len(links)}. Продолжение автоматически.'))
             async for message in scan_messages(client, entity, mode, on_wait):
-                links.update(dict.fromkeys(extract_links(message)))
+                links.update(dict.fromkeys(extract_links(message, exclude_cas=values['exclude_cas'])))
                 count += 1
                 if count == 1 or count % 100 == 0:
                     elapsed = time.monotonic() - began
@@ -172,7 +192,8 @@ class App(tk.Tk):
             finally:
                 if started:
                     target = export_links(values['folder'], values['chat'], links, count, complete,
-                                          scope=values['mode'] + '. ' + MODES[values['mode']])
+                                          scope=values['mode'] + '. ' + MODES[values['mode']] +
+                                          (' Ссылки Combot CAS исключены.' if values['exclude_cas'] else ''))
                     self.events.put(('result', (target, len(links), count, complete)))
 
     def poll(self):
@@ -212,7 +233,8 @@ class App(tk.Tk):
             self.stop.set()
             self.status.set('Останавливаем сбор и сохраняем результат. Закройте окно после завершения.')
         else:
-            self.destroy()
+            if self.persist_settings():
+                self.destroy()
 
 
 def paste_from_clipboard(field):
