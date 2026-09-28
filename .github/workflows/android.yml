@@ -6,6 +6,9 @@ on:
     paths: ['android_app/**', 'links.py', 'scanner.py', '.github/workflows/android.yml']
 permissions:
   contents: read
+concurrency:
+  group: android-build
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-22.04
