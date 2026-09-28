@@ -20,9 +20,9 @@ from settings import load_settings, save_settings
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Telegram → ссылки — 1.4')
-        self.geometry('880x670')
-        self.minsize(820, 640)
+        self.title('Telegram → ссылки — 1.5')
+        self.geometry('880x710')
+        self.minsize(820, 680)
         saved = load_settings()
         self.events = queue.Queue()
         self.stop = threading.Event()
@@ -51,9 +51,11 @@ class App(tk.Tk):
         ttk.Button(frame, text='Получить API ID / Hash', command=lambda: webbrowser.open('https://my.telegram.org/apps')).pack(anchor='w', pady=8)
         self.remember = tk.BooleanVar(value=saved.get('remember', True))
         self.exclude_cas = tk.BooleanVar(value=saved.get('exclude_cas', True))
+        self.group_telegram = tk.BooleanVar(value=saved.get('group_telegram', True))
         ttk.Checkbutton(frame, text='Запоминать API ID и API Hash на этом компьютере', variable=self.remember,
                         command=self.persist_settings).pack(anchor='w')
         ttk.Checkbutton(frame, text='Исключать служебные ссылки Combot CAS', variable=self.exclude_cas).pack(anchor='w')
+        ttk.Checkbutton(frame, text='Объединять посты Telegram в одну ссылку на канал', variable=self.group_telegram).pack(anchor='w')
         ttk.Button(frame, text='Сохранить настройки', command=self.persist_settings).pack(anchor='w', pady=4)
         self.mode = tk.StringVar(value='Полная история')
         self.mode_box = ttk.Combobox(frame, textvariable=self.mode, values=list(MODES), state='readonly', width=42)
@@ -82,7 +84,7 @@ class App(tk.Tk):
     def persist_settings(self):
         try:
             save_settings(self.values['api_id'].get(), self.values['api_hash'].get(),
-                          self.remember.get(), self.exclude_cas.get())
+                          self.remember.get(), self.exclude_cas.get(), self.group_telegram.get())
             return True
         except OSError:
             messagebox.showerror('Настройки', 'Не удалось сохранить настройки. Проверьте доступ к папке данных приложения.')
@@ -92,6 +94,7 @@ class App(tk.Tk):
         values = {key: value.get().strip() for key, value in self.values.items()}
         values['mode'] = self.mode.get()
         values['exclude_cas'] = self.exclude_cas.get()
+        values['group_telegram'] = self.group_telegram.get()
         if not values['api_id'].isdigit() or int(values['api_id']) <= 0 or not re.fullmatch(r'[a-fA-F0-9]{32}', values['api_hash']):
             messagebox.showerror('Данные API', 'Введите числовой API ID и API Hash (32 шестнадцатеричных символа).')
             return
@@ -170,7 +173,8 @@ class App(tk.Tk):
             def on_wait(seconds):
                 self.events.put(('status', f'Telegram запросил паузу: {seconds} сек. Уже собрано ссылок: {len(links)}. Продолжение автоматически.'))
             async for message in scan_messages(client, entity, mode, on_wait):
-                links.update(dict.fromkeys(extract_links(message, exclude_cas=values['exclude_cas'])))
+                links.update(dict.fromkeys(extract_links(message, exclude_cas=values['exclude_cas'],
+                                                        group_telegram=values['group_telegram'])))
                 count += 1
                 if count == 1 or count % 100 == 0:
                     elapsed = time.monotonic() - began
@@ -193,7 +197,8 @@ class App(tk.Tk):
                 if started:
                     target = export_links(values['folder'], values['chat'], links, count, complete,
                                           scope=values['mode'] + '. ' + MODES[values['mode']] +
-                                          (' Ссылки Combot CAS исключены.' if values['exclude_cas'] else ''))
+                                          (' Ссылки Combot CAS исключены.' if values['exclude_cas'] else '') +
+                                          (' Посты Telegram объединены по каналам.' if values['group_telegram'] else ''))
                     self.events.put(('result', (target, len(links), count, complete)))
 
     def poll(self):

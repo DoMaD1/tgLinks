@@ -6,3 +6,8 @@ exports/
 build/
 dist/
 *.spec
+!android_app/buildozer.spec
+android_app/.buildozer/
+android_app/bin/
+android_app/links.py
+android_app/scanner.py

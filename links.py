@@ -40,7 +40,36 @@ def is_combot_cas(link):
             and unquote(parts.path).rstrip('/').lower() == '/combot/cas')
 
 
-def extract_links(message, exclude_cas=False):
+def telegram_destination(link):
+    """Group public channel posts without destroying invites or service URLs."""
+    parts = urlsplit(link)
+    if parts.scheme == 'tg' and parts.hostname == 'resolve':
+        query = parse_qs(parts.query)
+        username = query.get('domain', [''])[0]
+        if query.get('post', [''])[0].isdigit() and re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{3,31}', username):
+            return 'https://t.me/' + username.lower()
+        return link
+    if parts.hostname not in ('t.me', 'www.t.me', 'telegram.me', 'www.telegram.me'):
+        return link
+    path = parts.path.strip('/')
+    if path.startswith('s/'):
+        path = path[2:]
+    pieces = path.split('/')
+    username = pieces[0]
+    reserved = {'joinchat', 'addstickers', 'addemoji', 'share', 'proxy', 'socks',
+                'login', 'confirmphone', 'setlanguage', 'addtheme', 'bg', 'invoice',
+                'boost', 'giftcode', 'contact', 'm', 'c', 's', 'iv'}
+    if username.lower() in reserved or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{3,31}', username):
+        return link
+    # Public post links: /username/message_id (including topics' /topic/message).
+    if len(pieces) in (2, 3) and all(piece.isdigit() for piece in pieces[1:]):
+        return 'https://t.me/' + username.lower()
+    if len(pieces) == 1 and not parts.query and not parts.fragment:
+        return 'https://t.me/' + username.lower()
+    return link
+
+
+def extract_links(message, exclude_cas=False, group_telegram=False):
     text = message.message or ''
     encoded = text.encode('utf-16-le')
     candidates = []
@@ -65,7 +94,8 @@ def extract_links(message, exclude_cas=False):
         for button in row.buttons:
             if getattr(button, 'url', None):
                 candidates.append(button.url)
-    return list(dict.fromkeys(link for value in candidates if (link := normalize(value))
+    return list(dict.fromkeys((telegram_destination(link) if group_telegram else link)
+                             for value in candidates if (link := normalize(value))
                               and not (exclude_cas and is_combot_cas(link))))
 
 

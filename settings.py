@@ -13,10 +13,10 @@ def load_settings():
         return {}
 
 
-def save_settings(api_id, api_hash, remember, exclude_cas):
+def save_settings(api_id, api_hash, remember, exclude_cas, group_telegram=True):
     folder = session_directory()
     folder.mkdir(parents=True, exist_ok=True)
-    data = {'remember': bool(remember), 'exclude_cas': bool(exclude_cas)}
+    data = {'remember': bool(remember), 'exclude_cas': bool(exclude_cas), 'group_telegram': bool(group_telegram)}
     if remember:
         data.update(api_id=api_id.strip(), api_hash=api_hash.strip())
     fd, name = tempfile.mkstemp(dir=folder, prefix='settings-', suffix='.tmp')
